@@ -1,20 +1,15 @@
 library(shiny)
-library(jsonlite)
-library(dplyr)
-library(ggplot2)
+library(tidyverse)
 
+games <- read_csv("games.csv")
+plays <- read_csv("plays.csv")
 
-dataset <- jsonlite::fromJSON("good_dataset/2018-11.json")
-
+dataset <- games
 # preferisco spaccare data e ora
 dataset <- dataset %>%
   mutate(month = format(as.Date(added),"%m"), year = format(as.Date(added),"%Y")) %>%
   select(everything() ,- added)
-note <- select(dataset, note != NULL)
 
-dataset <- dataset %>%
-  mutate(match_id = row_number()) %>%
-  select(id, everything())
 # class winrate
 class_hero <- dataset %>%
   group_by(hero, year, month) %>%
@@ -41,7 +36,6 @@ class_total$class <- as.factor(class_total$class)
 x_range <- range(class_total$month)
 y_range <- range(class_total$winrate)
 class_total%>% group_by(class)
-plot(x_range,y_range, color=class)
 
 
 # generic winrate
@@ -75,6 +69,12 @@ match_total%>%
   geom_point()
 # da tenere traccia :
 # win contro ogni classe: chi vince contro chi?
+
+
+
+# quali giocate sono state fatte "in curva"
+on_curve <- plays %>%
+  filter(turn==mana)
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(

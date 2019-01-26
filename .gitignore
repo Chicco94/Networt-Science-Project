@@ -16,6 +16,6 @@
 /dati_hs/
 
 
-/good_dataset/
-full_data.json
 create_full.py
+games.csv
+plays.csv
