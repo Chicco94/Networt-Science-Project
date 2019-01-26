@@ -1,0 +1,21 @@
+# di base messi da R
+
+.Rproj.user
+
+.Rhistory
+
+.RData
+
+.Ruserdata
+
+
+
+
+# non carico i dati perche' troppo grandi
+
+/dati_hs/
+
+
+/good_dataset/
+full_data.json
+create_full.py
