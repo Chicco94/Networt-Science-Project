@@ -1,0 +1,103 @@
+---
+title: "Presentazione"
+author: "Enrico Cominato"
+date: "11 febbraio 2019"
+output: ioslides_presentation
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+
+# dataset delle partite fatte
+dataset_games <- read_csv("games.csv")
+games <- dataset_games
+
+# dataset delle giocate fatte in ogni partita
+dataset_plays <- read_csv("plays.csv")
+plays <- dataset_plays
+
+# preferisco:
+# 1: spaccare data e ora
+# 2: mettere il risultato della partita come un booleano
+games <- games %>%
+  mutate(period = format(as.Date(added),"%Y-%m")) %>%
+  mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
+  select(everything() , -added)
+```
+
+## Introduction
+
+In this presentation we will analize the card game Hearthsone.
+- We will see how the "meta" has changed through the years, which decks have been played and we will try to figure out why they haev been played.
+- After that, there will be an analysis of each single card used in the game not only the frequency of usage during time but also we will try to figure out how a single card can have an impact on the game.
+- At the end there will be mithbuster time were we try to find if tips and advise from pro player are really useful or just mith.
+
+## First analysis
+Prepariamo un po' i dati
+
+```{r class winrate}
+# class winrate
+class_hero <- games %>%
+  group_by(hero, period) %>%
+  summarize(wins = sum(result), games = n()) %>%
+  rename(class = hero) %>%
+  ungroup()
+
+class_oppo <- games %>%
+  group_by(opponent, period) %>%
+  summarize(wins = sum(result), games = n()) %>%
+  rename(class = opponent) %>%
+  ungroup()
+
+class_total <- class_hero %>%
+  left_join(class_oppo, by = c("class", "period")) %>%
+  group_by(class, period) %>%
+  summarize(wins = wins.x+wins.y, games = games.x+games.y, winrate = wins/games)
+
+class_total$class <- as.factor(class_total$class)
+# vediamo i dati
+class_total
+```
+
+## Class Winrate
+
+```{r plotting}
+inputPanel(
+  #selectInput("n_breaks", label = "Number of bins:",
+   #           choices = c(10, 20, 35, 50), selected = 20),
+  
+  # Add a Slider Input to select date range
+  sliderInput(inputId = "Date_range_selector", 
+              label ="Select Date Range",
+              min = as.Date("2016-01","%Y-%m"),
+              max = as.Date("2019-01","%Y-%m"),
+              value = c(as.Date("2018-01","%Y-%m"),as.Date("2018-12","%Y-%m")),
+              timeFormat="%F")
+)
+
+# seleziono solo i dati da plottare
+filtered_df <- reactive({
+  class_total %>%
+    filter(between(period, input$Date_range_selector[1], input$Date_range_selector[2])
+           )
+})
+renderPlot({
+  ggplot(filtered_df(), aes_string(x = period, y = winrate, color=class)) + geom_point()
+})
+```
+
+## Bullets
+
+- Bullet 1
+- Bullet 2
+- Bullet 3
+
+## R Output
+
+```{r cars}
+summary(cars)
+```
+
+
