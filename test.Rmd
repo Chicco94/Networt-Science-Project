@@ -2,7 +2,8 @@
 title: "Presentazione"
 author: "Enrico Cominato"
 date: "11 febbraio 2019"
-output: ioslides_presentation
+output: 
+  html_notebook
 runtime: shiny
 ---
 
@@ -11,12 +12,12 @@ knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
 
 # dataset delle partite fatte
-dataset_games <- read_csv("games.csv")
+dataset_games <- read_csv("dataset/games.csv")
 games <- dataset_games
 
 # dataset delle giocate fatte in ogni partita
-dataset_plays <- read_csv("plays.csv")
-plays <- dataset_plays
+#dataset_plays <- read_csv("dataset/plays.csv")
+#plays <- dataset_plays
 
 # preferisco:
 # 1: spaccare data e ora
@@ -25,6 +26,27 @@ games <- games %>%
   mutate(period = format(as.Date(added),"%Y-%m")) %>%
   mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
   select(everything() , -added)
+
+classi <- c("Paladin", 
+            "Warlock", 
+            "Druid",
+            "Mage",
+            "Shaman",
+            "Hunter",
+            "Warrior",
+            "Priest",
+            "Rogue")
+icone <- c(
+  "https://hsreplay.net/static/images/class-icons/paladin.png",
+  "https://hsreplay.net/static/images/class-icons/warlock.png",
+  "https://hsreplay.net/static/images/class-icons/druid.png",
+  "https://hsreplay.net/static/images/class-icons/mage.png",
+  "https://hsreplay.net/static/images/class-icons/shaman.png",
+  "https://hsreplay.net/static/images/class-icons/hunter.png",
+  "https://hsreplay.net/static/images/class-icons/warrior.png",
+  "https://hsreplay.net/static/images/class-icons/priest.png",
+  "https://hsreplay.net/static/images/class-icons/rogue.png"
+)
 ```
 
 ## Introduction
@@ -61,30 +83,95 @@ class_total$class <- as.factor(class_total$class)
 class_total
 ```
 
-## Class Winrate
+## Guardiamo un po' il winrate di ogni classe {#title .emphasized }
+<style>
+  .col2 {
+    columns: 2 200px;         /* number of columns and width in pixels*/
+    -webkit-columns: 2 200px; /* chrome, safari */
+    -moz-columns: 2 200px;    /* firefox */
+  }
+  .col3 {
+    columns: 3 100px;
+    -webkit-columns: 3 100px;
+    -moz-columns: 3 100px;
+  }
+  .shiny-input-checkboxgroup.shiny-input-container-inline label ~ .shiny-options-group, .shiny-input-radiogroup.shiny-input-container-inline label ~ .shiny-options-group {
+    margin-top: -1px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 800px !important;
+  }
+  .irs{
+    width: 800px !important;
+  }
+</style>
 
-```{r plotting}
+    
+### Seleziona o più classi
+    
+```{r}
 inputPanel(
-  #selectInput("n_breaks", label = "Number of bins:",
-   #           choices = c(10, 20, 35, 50), selected = 20),
-  
-  # Add a Slider Input to select date range
-  sliderInput(inputId = "Date_range_selector", 
-              label ="Select Date Range",
-              min = as.Date("2016-01","%Y-%m"),
-              max = as.Date("2019-01","%Y-%m"),
-              value = c(as.Date("2018-01","%Y-%m"),as.Date("2018-12","%Y-%m")),
-              timeFormat="%F")
+  checkboxGroupInput("class_selector", "Classi",
+    choiceNames = mapply(classi, icone, FUN = function(classe, iconeUrl) {
+      tagList(
+        tags$img(src=iconeUrl, width=50, height=50),
+        ""
+      )
+    }, SIMPLIFY = FALSE, USE.NAMES = FALSE),
+    choiceValues = classi,
+    inline = TRUE
+  ),
+  textOutput("txt")
 )
+```
+   
+### Seleziona un arco di tempo
 
-# seleziono solo i dati da plottare
-filtered_df <- reactive({
-  class_total %>%
-    filter(between(period, input$Date_range_selector[1], input$Date_range_selector[2])
-           )
-})
+```{r}
+inputPanel(
+#Add a Slider Input to select date range
+  sliderInput(inputId = "Date_range_selector",
+             label ="Select Date Range",
+             min = as.Date("2016-06","%Y-%M"),
+             max = as.Date("2019-01","%Y-%M"),
+             value = c(as.Date("2018-01","%Y-%M"),as.Date("2018-12","%Y-%M")),
+             step = 30,
+             timeFormat="%Y-%m")
+)
+```   
+ 
+### Analizziamo il winrate delle classi selezionate
+    
+```{r}
+filter_by_date <- function(ds,range ){
+return( ds %>%
+          filter(
+            between(as.Date(period,"%Y-%M"),
+                    as.Date(range[1],"%Y-%M"),
+                    as.Date(range[2],"%Y-%M")
+                    ) 
+          )
+      )
+}
+
 renderPlot({
-  ggplot(filtered_df(), aes_string(x = period, y = winrate, color=class)) + geom_point()
+  # seleziono solo i dati da plottare
+  # if ( input$class_selector_druid)
+  #   druid_winrate <- 
+  #     class_total %>% 
+  #     filter(class == "Druid") %>%
+  #     filter_by_date(input$Date_range_selector)%>%
+  #   ggplot(aes(x = period, y = winrate)) + geom_point(color="Brown")
+  #   
+  # if ( input$class_selector_mage){
+  #   mage_winrate <- 
+  #     class_total %>% 
+  #     filter(class = "Mage") %>%
+  #     filter_by_date(input$Date_range_selector)%>%
+  #   ggplot(aes(x = period, y = winrate)) + geom_point(color="Blue")
+  class_total %>%
+    filter_by_date(input$Date_range_selector)%>%
+  ggplot(aes(x = period, y = winrate, color = class)) + geom_point()
 })
 ```
 

@@ -1,0 +1,29 @@
+#title {
+  color: blue;
+}
+
+.emphasized {
+  font-size: 1.2em;
+}
+
+/* PER LOGO */
+/*
+.gdbar img {
+  width: 300px !important;
+  height: 150px !important;
+  margin: 8px 8px;
+}*/
+/*
+.gdbar {
+  width: 200px !important;
+  height: 100px !important;
+}
+
+This will make the footer logo 150 by 75 pixels in size.
+slides > slide:not(.nobackground):before {
+  width: 75px;
+  height: 75px;
+  background-size: 75px 75px;
+}
+
+*/
