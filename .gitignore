@@ -8,5 +8,6 @@
 # non carico i dati perche' troppo grandi
 /dati_hs/
 /good_dataset/
+/test/
 games.csv
 plays.csv

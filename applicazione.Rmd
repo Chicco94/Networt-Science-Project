@@ -32,6 +32,9 @@ runtime: shiny
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
+# per caricare
+#library(rsconnect)
+#rsconnect::deployApp('applicazione.Rmd')
 
 # dataset delle partite fatte
 dataset_games <- read_csv("dataset/games.csv")
