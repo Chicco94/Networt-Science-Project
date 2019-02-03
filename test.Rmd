@@ -49,8 +49,6 @@ games <- games %>%
   mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
   select(everything() , -added)
 
-games %>% group_by(period) %>% count()
-
 start <- (games %>%
   select(period) %>%
   group_by(period) %>%
@@ -106,7 +104,7 @@ In this presentation we will analize the card game Hearthsone.
 All the data are available [here](http://www.hearthscry.com/). 
 
 ## First analysis
-Prepariamo un po' i dati
+Let's prepare the data. We have already the two dataset loaded (one in games_dataset)
 
 ```{r class winrate}
 # class winrate
@@ -215,16 +213,5 @@ renderPlot({
 })
 ```
 
-## Bullets
-
-- Bullet 1
-- Bullet 2
-- Bullet 3
-
-## R Output
-
-```{r cars}
-summary(cars)
-```
 
 
