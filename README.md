@@ -1,36 +1,15 @@
 ---
 title: "Presentazione"
 author: "Enrico Cominato"
-date: "11 febbraio 2019"
-output: 
-  html_notebook
-runtime: shiny
+output: github_document
 ---
 
-<style>
-  .col2 {
-    columns: 2 200px;         /* number of columns and width in pixels*/
-    -webkit-columns: 2 200px; /* chrome, safari */
-    -moz-columns: 2 200px;    /* firefox */
-  }
-  .col3 {
-    columns: 3 100px;
-    -webkit-columns: 3 100px;
-    -moz-columns: 3 100px;
-  }
-  .shiny-input-checkboxgroup.shiny-input-container-inline label ~ .shiny-options-group, .shiny-input-radiogroup.shiny-input-container-inline label ~ .shiny-options-group {
-    margin-top: -1px;
-    margin-left: auto;
-    margin-right: auto;
-    width: 800px !important;
-  }
-  .irs{
-    width: 800px !important;
-  }
-</style>
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  out.width = "100%"
+)
 library(tidyverse)
 
 # dataset delle partite fatte
@@ -212,6 +191,3 @@ renderPlot({
             scale_color_manual( values = colori)
 })
 ```
-
-
-

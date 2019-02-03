@@ -7,7 +7,7 @@ output: html_document
 library(shiny)
 library(tidyverse)
 
-games <- read_csv("games.csv")
+games <- read_csv("dataset/games.csv")
 plays <- read_csv("plays.csv")
 
 
@@ -17,6 +17,9 @@ dataset <- dataset %>%
   mutate(period = format(as.Date(added),"%Y-%m")) %>%
   select(everything() ,- added)
 
+test <- dataset %>%
+  group_by(period) %>%
+  count()
 # class winrate
 class_hero <- dataset %>%
   group_by(hero, period) %>%
@@ -40,10 +43,13 @@ class_total <- class_hero %>%
   mutate(id = row_number()) %>%
   arrange(-winrate)
 
-class_total$class <- as.factor(class_total$class)
-ggplot(data = class_total, mapping = aes(x = period, y = winrate, color=class)) + 
-  geom_point()+
-  geom_smooth()
+#class_total$class <- as.factor(class_total$class)
+
+ds <-class_total %>% filter(class=="Shaman") %>% group_by(period)
+ds <- dataset    %>% group_by(hero,period)
+ds <- class_total
+ggplot(ds,aes(x = period, y = winrate)) + 
+  geom_line(aes(group = class, color = class))
 
 
 # archetype winrate
