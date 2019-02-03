@@ -126,12 +126,16 @@ def json_to_csv(json):
         plays_csv = open("plays.csv","a")
     except Exception as e:
         print(e)
-
+    count = 0
+    tot = 0
     for game in games:
+        tot += 1
         text = game_to_csv(game)
         if text:
             games_csv.write(text[0]+"\n")
             plays_csv.write(text[1]+"\n")
+            count += 1
+    print("partite salvate: %d/%d"%(count,tot))
     games_csv.close()
     plays_csv.close()
     return True
@@ -200,13 +204,14 @@ def is_good_game(game):
     if result != None:
         return False
     # oppure le arene
-    result = re.search(r'"mode":"arena"',game)
-    if result != None:
-        return False
+##    result = re.search(r'"mode":"arena"',game)
+##    if result != None:
+##        return False
     return True
-    
+
+
 if __name__=="__main__":
-    dir_to_csv("dati_hs/")
+    dir_to_csv("../dati_hs/")
     duration = 1000  # millisecond
     freq = 500  # Hz
     winsound.Beep(freq, duration)
