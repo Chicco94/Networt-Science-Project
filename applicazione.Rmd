@@ -32,26 +32,26 @@ runtime: shiny
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
+library(corrplot)
 # per caricare
 #library(rsconnect)
 #rsconnect::deployApp('applicazione.Rmd')
 
 # dataset delle partite fatte
 dataset_games <- read_csv("dataset/games.csv")
-games <- dataset_games
-
-# dataset delle giocate fatte in ogni partita
-#dataset_plays <- read_csv("dataset/plays.csv")
-#plays <- dataset_plays
 
 # preferisco:
 # 1: spaccare data e ora
 # 2: mettere il risultato della partita come un booleano
-games <- games %>%
+games <- dataset_games %>%
   mutate(period = as.Date(added,format = "%Y-%m", tz = "UTc") ) %>%
   mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
   select(everything() , -added)
 
+# dataset delle giocate fatte in ogni partita
+#dataset_plays <- read_csv("dataset/plays.csv")
+
+# periodo di validità del dataset
 start <- (games %>%
   select(period) %>%
   group_by(period) %>%
@@ -64,6 +64,26 @@ end <- (games %>%
   arrange(desc(period)) %>%
   head(1))[[1]]
 
+filter_by_date <- function(ds,range ){
+return( ds %>%
+          filter(
+            between(as.Date(period,"%Y-%M"),
+                    as.Date(range[1],"%Y-%M"),
+                    as.Date(range[2],"%Y-%M")
+                    ) 
+          )
+      )
+}
+filter_by_class <- function(ds,selector){
+  # se non ho selezionato una classe le ritorno tutte
+  if (is.null(selector) ){ return(ds) }
+  # seleziono solo le classi scelte
+  return( ds %>%
+    filter( class %in% selector )
+  )
+}
+
+# per stampe e filtri vari
 classi <- c("Druid", 
             "Hunter", 
             "Mage",
@@ -78,7 +98,7 @@ colori <- c("Druid"="brown",
             "Hunter"="green", 
             "Mage"="aquamarine",
             "Paladin"="yellow",
-            "Priest"="white",
+            "Priest"="grey",
             "Rogue"="black",
             "Shaman"="blue",
             "Warlock"="blueviolet",
@@ -96,7 +116,6 @@ icone <- c(
   "https://hsreplay.net/static/images/class-icons/warrior.png"
 )
 ```
-
 ## Introduction
 
 In this presentation we will analize the card game Hearthsone.
@@ -104,12 +123,12 @@ In this presentation we will analize the card game Hearthsone.
 - After that, there will be an analysis of each single card used in the game not only the frequency of usage during time but also we will try to figure out how a single card can have an impact on the game.
 - At the end there will be "mithbuster time" were we try to find if tips and advise from pro player are really useful or just mith.
 
-All the data are available [here](http://www.hearthscry.com/). 
+All the data are available [here](http://www.hearthscry.com/). Here we have loaded data from `r start` to `r end`.
 
 ## First analysis
-Let's prepare the data. We have already the two dataset loaded (one in games_dataset)
+Let's prepare the data. **TESTO DA FARE**
 
-```{r class winrate}
+```{r class winrate computation, echo=TRUE}
 # class winrate
 class_hero <- games %>%
   group_by(hero, period) %>%
@@ -127,17 +146,22 @@ class_total <- class_hero %>%
   left_join(class_oppo, by = c("class", "period")) %>%
   group_by(class, period) %>%
   summarize(wins = wins.x+wins.y, games = games.x+games.y, winrate = wins/games)
+```
 
+Here we have an example of the resulting data of the last day. **TESTO DA FARE**
+```{r class winrate table view, echo=FALSE}
 class_total$class <- as.factor(class_total$class)
 # vediamo i dati
-class_total
+knitr::kable(
+  class_total %>% filter(period == end), 
+  caption = "Class winrate over time"
+)
+
 ```
 
 ## Guardiamo un po' il winrate di ogni classe {#title .emphasized }
 
-
-    
-### Seleziona o più classi
+We can select one or more classes (if none there will be displayed all)
     
 ```{r}
 inputPanel(
@@ -154,8 +178,7 @@ inputPanel(
   textOutput("txt")
 )
 ```
-   
-### Seleziona un arco di tempo
+And we can select a specific period of time.
 
 ```{r}
 inputPanel(
@@ -170,7 +193,8 @@ inputPanel(
 )
 ```   
  
-### Analizziamo il winrate delle classi selezionate
+So, this is our winrate for each class...but this is not tellig us a lot.
+In the next step we'll try to find out why a specific class has that winrate in that period.
     
 ```{r}
 filter_by_date <- function(ds,range ){
@@ -193,20 +217,6 @@ filter_by_class <- function(ds,selector){
 }
 
 renderPlot({
-  # seleziono solo i dati da plottare
-  # if ( input$class_selector_druid)
-  #   druid_winrate <- 
-  #     class_total %>% 
-  #     filter(class == "Druid") %>%
-  #     filter_by_date(input$Date_range_selector)%>%
-  #   ggplot(aes(x = period, y = winrate)) + geom_point(color="Brown")
-  #   
-  # if ( input$class_selector_mage){
-  #   mage_winrate <- 
-  #     class_total %>% 
-  #     filter(class = "Mage") %>%
-  #     filter_by_date(input$Date_range_selector)%>%
-  #   ggplot(aes(x = period, y = winrate)) + geom_point(color="Blue")
   class_total %>%
     filter_by_date(input$Date_range_selector)%>%
       filter_by_class(input$class_selector)%>%
@@ -215,6 +225,87 @@ renderPlot({
             scale_color_manual( values = colori)
 })
 ```
+## Presence on the game {#title .emphasized }
+First of all we want to know if the number of player that use a specific class can influence the meta. So we plot the number of games per class.
 
+```{r presence computation}
+class_total <- class_total %>%
+  group_by(period) %>%
+  mutate(total_games_per_day = sum(games)) %>%
+  ungroup() %>%
+  mutate(presence = games/total_games_per_day)
 
+# vediamo i dati
+knitr::kable(
+  class_total %>% filter(period == end), 
+  caption = "Class winrate over time"
+)
+```
 
+You can use the filters above to see speific class or period.
+
+```{r presence plot}
+renderPlot({
+  class_total %>%
+    filter_by_date(input$Date_range_selector)%>%
+      filter_by_class(input$class_selector)%>%
+        ggplot(aes(x = period, y = presence)) + 
+          geom_smooth(aes(color = factor(class)), se = FALSE) +
+            scale_color_manual( values = colori)
+})
+```
+What is the correlation between the number of player that are using a specific class and his winrate?
+
+```{r}
+inputPanel(
+#Add a Slider Input to select date range
+  sliderInput(inputId = "Date_range_selector_correlation",
+             label ="Select Date Range",
+             min = start,
+             max = end,
+             value = c(start,end),
+             step = 30,
+             timeFormat="%Y-%m")
+)
+``` 
+
+```{r correlation presence winrate plot}
+renderPlot({
+  M <- cor(class_total %>% 
+             filter(class == "Shaman") %>%
+             filter_by_date(input$Date_range_selector_correlation) %>%
+              select(winrate, presence)
+          )
+  corrplot(M, method = "ellipse")
+})
+```
+
+This seems not really helpful 
+
+Let's analyze the correlation between the winrate of different classes and see if we can understand somenthing more from the information about the presence of those classes in the game
+
+```{r winrate correlation computation}
+winrate_correlation <- tibble(
+  "Druid winrate" = class_total %>%
+  filter(class == "Druid", period == end) %>%
+  select(period,winrate)
+)
+
+add_column(
+  winrate_correlation,
+  "Priest winrate" = class_total %>%
+  filter(class == "Priest", period == end) %>%
+  select(period,winrate)
+)
+
+# winrate_correlation <- class_total %>%
+#   group_by(class, period) %>%
+#   select(class,period,winrate) %>%
+#   ungroup()
+
+# vediamo i dati
+knitr::kable(
+  winrate_correlation %>% filter(period == end), 
+  caption = "Class winrate over time"
+)
+```
