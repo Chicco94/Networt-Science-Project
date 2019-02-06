@@ -44,8 +44,11 @@ dataset_games <- read_csv("dataset/games.csv")
 # 1: spaccare data e ora
 # 2: mettere il risultato della partita come un booleano
 games <- dataset_games %>%
-  mutate(period = as.Date(added,format = "%Y-%m", tz = "UTc") ) %>%
+  mutate(period = as.Date(added,format = "%Y-%m") ) %>%
   mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
+  mutate(coin = if_else(coin=="true", TRUE, FALSE)) %>%
+  transform(rank = as.numeric(rank))%>%
+  transform(legend = as.numeric(legend))%>%
   select(everything() , -added)
 
 # dataset delle giocate fatte in ogni partita
@@ -67,9 +70,9 @@ end <- (games %>%
 filter_by_date <- function(ds,range ){
 return( ds %>%
           filter(
-            between(as.Date(period,"%Y-%M"),
-                    as.Date(range[1],"%Y-%M"),
-                    as.Date(range[2],"%Y-%M")
+            between(as.Date(period,"%Y-%m"),
+                    as.Date(range[1],"%Y-%m"),
+                    as.Date(range[2],"%Y-%m")
                     ) 
           )
       )
@@ -197,25 +200,6 @@ So, this is our winrate for each class...but this is not tellig us a lot.
 In the next step we'll try to find out why a specific class has that winrate in that period.
     
 ```{r}
-filter_by_date <- function(ds,range ){
-return( ds %>%
-          filter(
-            between(as.Date(period,"%Y-%M"),
-                    as.Date(range[1],"%Y-%M"),
-                    as.Date(range[2],"%Y-%M")
-                    ) 
-          )
-      )
-}
-filter_by_class <- function(ds,selector){
-  # se non ho selezionato una classe le ritorno tutte
-  if (is.null(selector) ){ return(ds) }
-  # seleziono solo le classi scelte
-  return( ds %>%
-    filter( class %in% selector )
-  )
-}
-
 renderPlot({
   class_total %>%
     filter_by_date(input$Date_range_selector)%>%
@@ -242,13 +226,39 @@ knitr::kable(
 )
 ```
 
-You can use the filters above to see speific class or period.
+As before, We can select one or more classes (if none there will be displayed all) and a specific period of time.
+    
+```{r}
+inputPanel(
+  checkboxGroupInput("presence_class_selector", "Classi",
+    choiceNames = mapply(classi, icone, FUN = function(classe, iconeUrl) {
+      tagList(
+        tags$img(src=iconeUrl, width=50, height=50),
+        ""
+      )
+    }, SIMPLIFY = FALSE, USE.NAMES = FALSE),
+    choiceValues = classi,
+    inline = TRUE
+  )
+)
+
+inputPanel(
+#Add a Slider Input to select date range
+  sliderInput(inputId = "presence_Date_range_selector",
+             label ="Select Date Range",
+             min = start,
+             max = end,
+             value = c(start,end),
+             step = 30,
+             timeFormat="%Y-%m")
+)
+```
 
 ```{r presence plot}
 renderPlot({
   class_total %>%
-    filter_by_date(input$Date_range_selector)%>%
-      filter_by_class(input$class_selector)%>%
+    filter_by_date(input$presence_Date_range_selector)%>%
+      filter_by_class(input$presence_class_selector)%>%
         ggplot(aes(x = period, y = presence)) + 
           geom_smooth(aes(color = factor(class)), se = FALSE) +
             scale_color_manual( values = colori)
@@ -259,7 +269,7 @@ What is the correlation between the number of player that are using a specific c
 ```{r}
 inputPanel(
 #Add a Slider Input to select date range
-  sliderInput(inputId = "Date_range_selector_correlation",
+  sliderInput(inputId = "correlation_Date_range_selector",
              label ="Select Date Range",
              min = start,
              max = end,
@@ -271,41 +281,194 @@ inputPanel(
 
 ```{r correlation presence winrate plot}
 renderPlot({
-  M <- cor(class_total %>% 
-             filter(class == "Shaman") %>%
-             filter_by_date(input$Date_range_selector_correlation) %>%
-              select(winrate, presence)
-          )
-  corrplot(M, method = "ellipse")
+  class_total %>%
+    filter_by_date(input$correlation_Date_range_selector)%>%
+    mutate(total_games_period_selected = sum(games))%>%
+    group_by(class,total_games_period_selected)%>%
+    summarize(games_per_period = sum(games),
+              wins_per_period  = sum(wins))%>%
+    # quante partite registrate di quella classe sul totale delle partite di tutte le classi
+    mutate(presence_per_period = games_per_period/total_games_period_selected,
+    # quante vittorie registrate di quella classe sul totale delle partite di quella classe
+              winrate_per_period = wins_per_period/games_per_period) %>%
+    select(class, wins_per_period,games_per_period,presence_per_period,winrate_per_period) %>%
+
+    # plot dei risultati
+    ggplot(aes(x = presence_per_period, y = winrate_per_period),show.legend = FALSE) +  
+    geom_point(aes(color = factor(class), size = 16*winrate_per_period, stroke = 5),show.legend = FALSE) +
+    scale_color_manual( values = colori)+
+    ylim(0.3 ,0.75) + 
+    xlim(0.  ,0.3)
 })
 ```
 
-This seems not really helpful 
+This seems not really helpful. And if we focus only on high ranks? 
+## Winrate filtered on high ranks {#title .emphasized }
 
+```{r class winrate computation with rank, echo=TRUE}
+# class winrate
+class_hero_rank <- games %>%
+  filter(rank <=5 | legend > 0 ) %>%
+  group_by(hero, period) %>%
+  summarize(wins = sum(result), games = n()) %>%
+  rename(class = hero) %>%
+  ungroup()
+
+class_oppo_rank <- games %>%
+  filter(rank <=5 | legend > 0 ) %>%
+  group_by(opponent, period) %>%
+  summarize(wins = sum(result), games = n()) %>%
+  rename(class = opponent) %>%
+  ungroup()
+
+class_total_rank <- class_hero_rank %>%
+  left_join(class_oppo_rank, by = c("class", "period")) %>%
+  group_by(class, period) %>%
+  summarize(wins = wins.x+wins.y, games = games.x+games.y, winrate = wins/games) %>%
+  ungroup()
+```
+
+```{r rank input}
+inputPanel(
+  checkboxGroupInput("rank_class_selector", "Classi",
+    choiceNames = mapply(classi, icone, FUN = function(classe, iconeUrl) {
+      tagList(
+        tags$img(src=iconeUrl, width=50, height=50),
+        ""
+      )
+    }, SIMPLIFY = FALSE, USE.NAMES = FALSE),
+    choiceValues = classi,
+    inline = TRUE
+  )
+)
+
+inputPanel(
+#Add a Slider Input to select date range
+  sliderInput(inputId = "rank_Date_range_selector",
+             label ="Select Date Range",
+             min = start,
+             max = end,
+             value = c(start,end),
+             step = 30,
+             timeFormat="%Y-%m")
+)
+``` 
+
+```{r rank winrate plot}
+renderPlot({
+  class_total_rank %>%
+    filter_by_date(input$rank_Date_range_selector)%>%
+      filter_by_class(input$rank_class_selector)%>%
+        ggplot(aes(x = period, y = winrate)) + 
+          geom_smooth(aes(color = factor(class)), se = FALSE) +
+            scale_color_manual( values = colori)
+})
+```
+
+Does we have any changes looking to the correlation between the number of player that are using a specific class and his winrate?
+
+```{r}
+inputPanel(
+#Add a Slider Input to select date range
+  sliderInput(inputId = "rank_correlation_Date_range_selector",
+             label ="Select Date Range",
+             min = start,
+             max = end,
+             value = c(start,end),
+             step = 30,
+             timeFormat="%Y-%m")
+)
+``` 
+
+```{r rank correlation presence winrate plot}
+renderPlot({
+  class_total_rank %>%
+    filter_by_date(input$rank_correlation_Date_range_selector)%>%
+    mutate(total_games_period_selected = sum(games,  na.rm = TRUE))%>%
+    group_by(class,total_games_period_selected)%>%
+    summarize(games_per_period = sum(games,  na.rm = TRUE),
+              wins_per_period  = sum(wins ,  na.rm = TRUE))%>%
+    # quante partite registrate di quella classe sul totale delle partite di tutte le classi
+    mutate(presence_per_period = games_per_period/total_games_period_selected,
+    # quante vittorie registrate di quella classe sul totale delle partite di quella classe
+           winrate_per_period  = wins_per_period/games_per_period) %>%
+    select(class, wins_per_period,games_per_period,presence_per_period,winrate_per_period)%>%
+  
+
+    # plot dei risultati
+    ggplot(aes(x = presence_per_period, y = winrate_per_period),show.legend = FALSE) +  
+    geom_point(aes(color = factor(class), size = 16*winrate_per_period, stroke = 5),show.legend = FALSE) +
+    scale_color_manual( values = colori)+
+    ylim(0.3 ,0.75) + 
+    xlim(0.  ,0.3)
+})
+```
+
+
+
+## correlation
 Let's analyze the correlation between the winrate of different classes and see if we can understand somenthing more from the information about the presence of those classes in the game
 
 ```{r winrate correlation computation}
-winrate_correlation <- tibble(
-  "Druid winrate" = class_total %>%
-  filter(class == "Druid", period == end) %>%
-  select(period,winrate)
-)
+winrate_correlation <- class_total %>% select(period)
 
-add_column(
-  winrate_correlation,
-  "Priest winrate" = class_total %>%
-  filter(class == "Priest", period == end) %>%
-  select(period,winrate)
-)
+winrate_correlation <- class_total  %>% 
+  filter(class=="Druid") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Druid winrate" = winrate) %>%
+  select(period, `Druid winrate`)
+  
+winrate_correlation <- class_total  %>% 
+  filter(class=="Priest") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Priest winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`)
 
-# winrate_correlation <- class_total %>%
-#   group_by(class, period) %>%
-#   select(class,period,winrate) %>%
-#   ungroup()
+winrate_correlation <- class_total  %>% 
+  filter(class=="Rogue") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Rogue winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Rogue winrate`)
+
+winrate_correlation <- class_total  %>% 
+  filter(class=="Mage") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Mage winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Rogue winrate`, `Mage winrate`)
+
+winrate_correlation <- class_total  %>% 
+  filter(class=="Shaman") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Shaman winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Shaman winrate`, `Rogue winrate`, `Mage winrate`)
+
+winrate_correlation <- class_total  %>% 
+  filter(class=="Warlock") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Warlock winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Shaman winrate`, `Rogue winrate`, `Mage winrate`, `Warlock winrate`)
+
+winrate_correlation <- class_total  %>% 
+  filter(class=="Warrior") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Warrior winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Shaman winrate`, `Rogue winrate`, `Mage winrate`, `Warlock winrate`, `Warrior winrate`)
+
+winrate_correlation <- class_total  %>% 
+  filter(class=="Paladin") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Paladin winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Shaman winrate`, `Rogue winrate`, `Mage winrate`, `Warlock winrate`, `Warrior winrate`, `Paladin winrate`)
+
+winrate_correlation <- class_total  %>% 
+  filter(class=="Hunter") %>%
+  right_join(winrate_correlation, by = "period") %>%
+  mutate("Hunter winrate" = winrate) %>%
+  select(period, `Druid winrate`, `Priest winrate`, `Shaman winrate`, `Rogue winrate`, `Mage winrate`, `Warlock winrate`, `Warrior winrate`, `Paladin winrate`, `Hunter winrate`)
 
 # vediamo i dati
 knitr::kable(
-  winrate_correlation %>% filter(period == end), 
+  head(winrate_correlation,10), 
   caption = "Class winrate over time"
 )
 ```
