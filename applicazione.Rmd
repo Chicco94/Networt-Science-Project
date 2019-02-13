@@ -32,10 +32,55 @@ runtime: shiny
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
 library(tidyverse)
-library(corrplot)
+library(igraph)
+#library(corrplot)
 # per caricare
 #library(rsconnect)
 #rsconnect::deployApp('applicazione.Rmd')
+
+# per stampe e filtri vari
+classi <- c("Druid", 
+            "Hunter", 
+            "Mage",
+            "Paladin",
+            "Priest",
+            "Rogue",
+            "Shaman",
+            "Warlock",
+            "Warrior")
+
+carte_da_escludere <- c("The Coin",
+                        "Shapeshift"      , "Dire Shapeshift",   
+                        "Steady Shot"     , "Ballista Shot",
+                        "Fireblast"       , "Fireblast Rank 2",
+                        "Reinforce"       , "The Silver Hand",
+                        "Lesser Heal"     , "Heal",
+                        "Dagger Mastery"  , "Poisoned Daggers",
+                        "Totemic Call"    , "Totemic Slam",
+                        "Life Tap"        , "Soul Tap",
+                        "Armor Up!"       , "Tank Up!" )
+
+colori <- c("Druid"="brown", 
+            "Hunter"="green", 
+            "Mage"="aquamarine",
+            "Paladin"="yellow",
+            "Priest"="grey",
+            "Rogue"="black",
+            "Shaman"="blue",
+            "Warlock"="blueviolet",
+            "Warrior"="red")
+
+icone <- c(
+  "https://hsreplay.net/static/images/class-icons/druid.png",
+  "https://hsreplay.net/static/images/class-icons/hunter.png",
+  "https://hsreplay.net/static/images/class-icons/mage.png",
+  "https://hsreplay.net/static/images/class-icons/paladin.png",
+  "https://hsreplay.net/static/images/class-icons/priest.png",
+  "https://hsreplay.net/static/images/class-icons/rogue.png",
+  "https://hsreplay.net/static/images/class-icons/shaman.png",
+  "https://hsreplay.net/static/images/class-icons/warlock.png",
+  "https://hsreplay.net/static/images/class-icons/warrior.png"
+)
 
 # dataset delle partite fatte
 dataset_games <- read_csv("dataset/games.csv")
@@ -43,6 +88,7 @@ dataset_games <- read_csv("dataset/games.csv")
 # preferisco:
 # 1: spaccare data e ora
 # 2: mettere il risultato della partita come un booleano
+# 3: trasformo il rank in un valore intero
 games <- dataset_games %>%
   mutate(period = as.Date(added,format = "%Y-%m") ) %>%
   mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
@@ -52,7 +98,27 @@ games <- dataset_games %>%
   select(everything() , -added)
 
 # dataset delle giocate fatte in ogni partita
-#dataset_plays <- read_csv("dataset/plays.csv")
+dataset_plays <- read_csv("dataset/plays.csv")
+
+# Da rimuovere
+#    card_id              name tot
+# 1  AT_042t Sabertooth Lion     2
+# 2 AT_042t2 Sabertooth Panther  2
+# 3 AT_042t2 Druid of the Saber  2
+# 4  AT_042t Druid of the Saber  2
+plays <- dataset_plays %>%
+  filter(turn > 0 & 
+         !(card_id=="AT_042t2" | name=="Sabertooth Lion") &
+         !(name %in% carte_da_escludere)
+         ) %>%
+  transform(mana = as.numeric(mana))%>%
+  mutate(mana = if_else(is.na(mana), 0, mana)) %>%
+  group_by(card_id,name)%>%
+  mutate(total_played = n())%>%
+  ungroup()%>%
+  filter(total_played>50)%>%
+  left_join(games , by = c("game_id"="id"))%>%
+  select(game_id, period, player, turn, card_id, name, mana, total_played)
 
 # periodo di validità del dataset
 start <- (games %>%
@@ -86,38 +152,9 @@ filter_by_class <- function(ds,selector){
   )
 }
 
-# per stampe e filtri vari
-classi <- c("Druid", 
-            "Hunter", 
-            "Mage",
-            "Paladin",
-            "Priest",
-            "Rogue",
-            "Shaman",
-            "Warlock",
-            "Warrior")
-
-colori <- c("Druid"="brown", 
-            "Hunter"="green", 
-            "Mage"="aquamarine",
-            "Paladin"="yellow",
-            "Priest"="grey",
-            "Rogue"="black",
-            "Shaman"="blue",
-            "Warlock"="blueviolet",
-            "Warrior"="red")
-
-icone <- c(
-  "https://hsreplay.net/static/images/class-icons/druid.png",
-  "https://hsreplay.net/static/images/class-icons/hunter.png",
-  "https://hsreplay.net/static/images/class-icons/mage.png",
-  "https://hsreplay.net/static/images/class-icons/paladin.png",
-  "https://hsreplay.net/static/images/class-icons/priest.png",
-  "https://hsreplay.net/static/images/class-icons/rogue.png",
-  "https://hsreplay.net/static/images/class-icons/shaman.png",
-  "https://hsreplay.net/static/images/class-icons/warlock.png",
-  "https://hsreplay.net/static/images/class-icons/warrior.png"
-)
+top <- function(list,n){
+  return( head(sort(list, decreasing = TRUE),n) )
+}
 ```
 ## Introduction
 
@@ -472,3 +509,85 @@ knitr::kable(
   caption = "Class winrate over time"
 )
 ```
+
+## Card Analysis
+```{r cards}
+filtered_plays <- plays %>%
+  filter(period==end)
+
+nodes <- filtered_plays %>%
+  group_by(name)%>%
+  summarize(avg_turn = mean(turn), 
+            total_played = mean(total_played), 
+            mana=mean(mana) )%>%
+  select(name,mana,avg_turn, total_played)%>%
+  arrange(avg_turn)
+
+card_name1 = character()
+card_name2 = character()
+#way = logical()
+
+total <- length(filtered_plays$game_id)
+for( i in (2:total)){
+  row1 = filtered_plays[i-1, ]
+  row2 = filtered_plays[i  , ]
+  # se sono due giocate successive della stessa partita le lego tra loro
+  if (row1$game_id == row2$game_id) {
+    # se sono due giocate dello stesso giocatore
+    card_name1[[i]]<- row1$name
+    card_name2[[i]]<- row2$name
+    #if (row1$player == row2$player){
+    #  way[[i]]<- 1
+    #} else {
+    #  way[[i]]<- -1
+    #}
+  }
+}
+
+edges <- tibble(
+  card_1 = card_name1, 
+  card_2 = card_name2)
+  #ways     = way[2:total] )
+
+
+# tengo conto di quante volte viene fatta la stessa giocata
+edges <- edges %>%
+  filter(!is.na(card_1) & !is.na(card_2)) %>%
+  group_by(card_1,card_2)%>%
+  summarize(weight = n())
+
+
+# controlliamo che sia tutto apposto
+#temp <- edges %>%
+#  anti_join(nodes , by = c("card_1"="name")) %>%
+#  anti_join(nodes , by = c("card_2"="name"))
+
+g = graph_from_data_frame(edges, directed = TRUE, vertices = nodes)
+v_color <- rep("grey40", vcount(g))
+plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
+```
+
+Let's analyze this network!!
+First of all...which are the most versatile cards? They are such cards which lies in lot of path...so those with highest betweeness.
+```{r betweenness, echo=TRUE}
+belli = top(betweenness(g), 10)
+v_color[belli] <- "#ff9d00"
+plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
+```
+
+When we have to build a deck and we miss a card...which are the best replacements? 
+
+```{r similarity, echo=TRUE}
+s <- similarity(g)
+head(s)
+```
+
+Which are the most powerful cards?
+
+```{r power, echo=TRUE}
+forti = top(power_centrality(g),10)
+v_color <- rep("grey40", vcount(g))
+v_color[forti] <- "#ff9d00"
+plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
+```
+

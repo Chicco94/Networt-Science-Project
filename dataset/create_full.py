@@ -164,11 +164,11 @@ def game_to_csv(game):
             game_data += ','+find_value(game, game_value)
         
         # trovo i dati delle giocate della partita
-        cards_data = find_all_plays(game,  find_value(game, "id"))
+        cards_data = find_all_plays(game,  find_value(game, "id"), find_value(game, "added"))
         return game_data,cards_data
     return False
 
-def find_all_plays(game, game_id):
+def find_all_plays(game, game_id, period):
     result = re.search(r'"card_history":',game)
     index  = result.span()[1]
     game = game[index:]
