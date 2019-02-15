@@ -113,12 +113,8 @@ plays <- dataset_plays %>%
          ) %>%
   transform(mana = as.numeric(mana))%>%
   mutate(mana = if_else(is.na(mana), 0, mana)) %>%
-  group_by(card_id,name)%>%
-  mutate(total_played = n())%>%
-  ungroup()%>%
-  filter(total_played>50)%>%
   left_join(games , by = c("game_id"="id"))%>%
-  select(game_id, period, player, turn, card_id, name, mana, total_played)
+  select(game_id, period, player, turn, card_id, name, mana)
 
 # periodo di validità del dataset
 start <- (games %>%
@@ -513,34 +509,51 @@ knitr::kable(
 ## Card Analysis
 ```{r cards}
 filtered_plays <- plays %>%
-  filter(period==end)
+  left_join(games%>%select(id,result,rank,legend), by = c("game_id"="id"))%>%
+  filter(period==end)%>%
+  filter(rank<=5 | legend >0)
 
 nodes <- filtered_plays %>%
   group_by(name)%>%
   summarize(avg_turn = mean(turn), 
-            total_played = mean(total_played), 
             mana=mean(mana) )%>%
-  select(name,mana,avg_turn, total_played)%>%
+  ungroup()%>%
+  select(name,mana,avg_turn)%>%
   arrange(avg_turn)
 
-card_name1 = character()
-card_name2 = character()
+card_name1 <- character()
+card_name2 <- character()
 #way = logical()
+old_me <- "fake"
+old_op <- "fake"
 
 total <- length(filtered_plays$game_id)
+total_edges <- 1
 for( i in (2:total)){
   row1 = filtered_plays[i-1, ]
   row2 = filtered_plays[i  , ]
   # se sono due giocate successive della stessa partita le lego tra loro
   if (row1$game_id == row2$game_id) {
-    # se sono due giocate dello stesso giocatore
-    card_name1[[i]]<- row1$name
-    card_name2[[i]]<- row2$name
-    #if (row1$player == row2$player){
-    #  way[[i]]<- 1
-    #} else {
-    #  way[[i]]<- -1
-    #}
+    if (row1$player == row2$player) {
+      # se sono due giocate dello stesso giocatore
+      card_name1[[total_edges]]<- row1$name
+      card_name2[[total_edges]]<- row2$name
+    } else if (row1$player == "me"){
+      if (old_me=="fake"){ old_me <- row2$name }
+      else{
+        card_name1[[total_edges]]<- old_me
+        card_name2[[total_edges]]<- row2$name
+        old_me                   <- row2$name
+      }
+    } else if (row1$player == "opponent"){
+      if (old_op=="fake"){ old_op <- row2$name }
+      else{
+        card_name1[[total_edges]]<- old_op
+        card_name2[[total_edges]]<- row2$name
+        old_op                   <- row2$name
+      }
+    }
+    total_edges = total_edges + 1
   }
 }
 
@@ -564,13 +577,15 @@ edges <- edges %>%
 
 g = graph_from_data_frame(edges, directed = TRUE, vertices = nodes)
 v_color <- rep("grey40", vcount(g))
-plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
+l = layout_with_kk(g)*1.2
+plot(g, layout=l, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
 ```
 
 Let's analyze this network!!
 First of all...which are the most versatile cards? They are such cards which lies in lot of path...so those with highest betweeness.
 ```{r betweenness, echo=TRUE}
 belli = top(betweenness(g), 10)
+belli
 v_color[belli] <- "#ff9d00"
 plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
 ```
@@ -591,3 +606,14 @@ v_color[forti] <- "#ff9d00"
 plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
 ```
 
+Can we identify combos?
+
+```{r components, echo=TRUE}
+components = components(g)
+components
+components = biconnected_components(g)
+components
+v_color <- rep("grey40", vcount(g))
+v_color[forti] <- "#ff9d00"
+plot(g, layout=layout_with_kk, edge.width = edges$weight, vertex.label=NA,  vertex.color=v_color)
+```
