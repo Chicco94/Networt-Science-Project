@@ -5,6 +5,6 @@ account: enrico-cominato
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 685453
-bundleId: 1860278
+bundleId: 1887087
 url: https://enrico-cominato.shinyapps.io/applicazione/
-when: 1549482882.96942
+when: 1550678957.68756

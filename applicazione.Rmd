@@ -95,14 +95,16 @@ icone <- c(
   "https://hsreplay.net/static/images/class-icons/warlock.png",
   "https://hsreplay.net/static/images/class-icons/warrior.png"
 )
-
+load_games <- Sys.time()
 # dataset delle partite fatte
 dataset_games <- read_csv("dataset/games.csv")
+load_games <- Sys.time() - load_games
 
 # preferisco:
 # 1: spaccare data e ora
 # 2: mettere il risultato della partita come un booleano
 # 3: trasformo il rank in un valore intero
+dataframe_games <- Sys.time()
 games <- dataset_games %>%
   mutate(period = as.Date(added,format = "%Y-%m") ) %>%
   mutate(result = if_else(result=="win", TRUE, FALSE)) %>%
@@ -110,16 +112,23 @@ games <- dataset_games %>%
   transform(rank = as.numeric(rank))%>%
   transform(legend = as.numeric(legend))%>%
   select(everything() , -added)
+dataframe_games <- Sys.time() - dataframe_games
 
+
+load_plays <- Sys.time()
 # dataset delle giocate fatte in ogni partita
-dataset_plays <- read_csv("dataset/plays.csv")
+dataset_plays <- read_csv("dataset/plays1.csv")
+load_plays <- Sys.time() - load_plays
 
-plays <- dataset_plays %>%
-  filter(turn > 0 & !(name %in% carte_da_escludere)) %>%
-  transform(mana = as.numeric(mana))%>%
-  mutate(mana = if_else(is.na(mana), 0, mana)) %>%
-  left_join(games , by = c("game_id"="id"))%>%
-  select(game_id, period, player, turn, card_id, name, mana)
+filtered_plays<-dataset_plays
+#dataframe_plays <- Sys.time()
+#plays <- dataset_plays %>%
+#  filter(turn > 0 & !(name %in% carte_da_escludere)) %>%
+#  transform(mana = as.numeric(mana))%>%
+#  mutate(mana = if_else(is.na(mana), 0, mana)) %>%
+#  left_join(games , by = c("game_id"="id"))%>%
+#  select(game_id, period, player, turn, card_id, name, mana)
+#dataframe_plays <- Sys.time() - dataframe_plays
 
 # periodo di validità del dataset
 start <- (games %>%
@@ -134,78 +143,101 @@ end <- (games %>%
   arrange(desc(period)) %>%
   head(1))[[1]]
 
-filtered_plays <- plays %>%
-    left_join(games%>%select(id,result,rank,legend), by = c("game_id"="id"))%>%
-    mutate(result = if_else(player=="opponent",!result,result))%>%
-    filter(period>(end-60))%>%
-    filter(rank<=5 | legend >0)
+#dataframe_filtered_plays <- Sys.time()
+#filtered_plays <- plays %>%
+#    left_join(games%>%select(id,result,rank,legend), by = c("game_id"="id"))%>%
+#    mutate(result = if_else(player=="opponent",!result,result))%>%
+#    filter(period>=(end-120))%>%
+    #filter(rank<=5 | legend>0)%>%
+  # prendo solo quelle carte che sono state giocate almeno 100 volte
+#    group_by(name,card_id)%>%
+#    filter(n()>100)
+#dataframe_filtered_plays <- Sys.time() - dataframe_filtered_plays
+
+#wrong_data = filtered_plays %>% 
+#  group_by(game_id,player,turn) %>% 
+#  summarise(mana_spent = sum(mana))%>%
+#  arrange(mana_spent) %>% 
+#  filter(mana_spent>16) %>%
+#  ungroup()%>% 
+#  select(game_id)
+
+#filtered_plays1 <- filtered_plays %>%
+#  anti_join(wrong_data, by ="game_id")
+#write_csv(filtered_plays1,"dataset/plays1.csv")
 
 nodes <- filtered_plays %>%
   group_by(name)%>%
   summarize(avg_turn = mean(turn), 
             mana=mean(mana),
-            winrate=-1/log(sum(result)/n()) )%>% # -1/log(0.8) > -1/log(0.5) > -1/log(0.3)
+            winrate=sum(result)/n())%>%#-1/log(sum(result)/n()) )%>% # -1/log(0.8) > -1/log(0.5) > -1/log(0.3)
   ungroup()%>%
   select(name,mana,avg_turn,winrate)%>%
   arrange(avg_turn)
 
-# card network construction
-card_name1 <- character()
-card_name2 <- character()
 
-# queste sono per la prima iterazione
-old_me <- "fake"
-old_op <- "fake"
-
-total <- length(filtered_plays$game_id)
-total_edges <- 1
-for( i in (2:total)){
-  row1 = filtered_plays[i-1, ]
-  row2 = filtered_plays[i  , ]
-  # se sono due giocate successive della stessa partita le lego tra loro
-  if (row1$game_id == row2$game_id) {
-    if (row1$player == row2$player) {
-      # se sono due giocate dello stesso giocatore
-      card_name1[[total_edges]]<- row1$name
-      card_name2[[total_edges]]<- row2$name
-    } else if (row1$player == "me"){
-      if (old_me=="fake"){ old_me <- row2$name }
-      else{
-        card_name1[[total_edges]]<- old_me
-        card_name2[[total_edges]]<- row2$name
-        old_me                   <- row2$name
-      }
-    } else if (row1$player == "opponent"){
-      if (old_op=="fake"){ old_op <- row2$name }
-      else{
-        card_name1[[total_edges]]<- old_op
-        card_name2[[total_edges]]<- row2$name
-        old_op                   <- row2$name
-      }
-    }
-    total_edges = total_edges + 1
-  }
-}
-
-edges <- tibble(
-  card_1 = card_name1, 
-  card_2 = card_name2)
+# dataframe_edges <- Sys.time()
+#queste sono per la prima iterazione
+# old_me <- "fake"
+# old_op <- "fake"
+# 
+# total <- length(filtered_plays$game_id)
+# total_edges <- 1
+# # card network construction
+# card_name1 <- array(dim=total)
+# card_name2 <- array(dim=total)
+# for( i in (2:total)){
+#   row1 <- filtered_plays[i-1, ]
+#   row2 <- filtered_plays[i  , ]
+#   # se sono due giocate successive della stessa partita le lego tra loro
+#   if (row1$game_id == row2$game_id) {
+#     if (row1$player == row2$player) {
+#       # se sono due giocate dello stesso giocatore
+#       card_name1[total_edges]<- row1$name
+#       card_name2[total_edges]<- row2$name
+#     } else if (row1$player == "me"){
+#       if (old_me=="fake"){ old_me <- row2$name }
+#       else{
+#         card_name1[total_edges]<- old_me
+#         card_name2[total_edges]<- row2$name
+#         old_me                   <- row2$name
+#       }
+#     } else if (row1$player == "opponent"){
+#       if (old_op=="fake"){ old_op <- row2$name }
+#       else{
+#         card_name1[total_edges]<- old_op
+#         card_name2[total_edges]<- row2$name
+#         old_op                 <- row2$name
+#       }
+#     }
+#     total_edges <- total_edges + 1
+#   }
+# }
+# 
+# edges <- tibble(
+#   card_1 = card_name1,
+#   card_2 = card_name2)
 
 # tengo conto di quante volte viene fatta la stessa giocata
-edges <- edges %>%
-  filter(!is.na(card_1) & !is.na(card_2))%>%
-  group_by(card_1,card_2)%>%
-  summarize(weight = n())%>%
-  arrange(weight)
-
+# edges <- edges %>%
+#   filter(!is.na(card_1) & !is.na(card_2))%>%
+#   group_by(card_1,card_2)%>%
+#   summarize(weight = n())%>%
+#   arrange(weight)
+#dataframe_edges <- Sys.time() - dataframe_edges
+#write_csv(edges,"dataset/edges.csv")
+edges <- read_csv("dataset/edges.csv")
 
 # controlliamo che sia tutto apposto
-# temp <- archi %>%
-#  anti_join(nodes , by = c("card_1"="name")) %>%
-#  anti_join(nodes , by = c("card_2"="name"))
+#temp <- edges %>%
+# anti_join(nodes , by = c("card_1"="name")) %>%
+# anti_join(nodes , by = c("card_2"="name"))
 
+#create_network <- Sys.time()
 g = graph_from_data_frame(edges, directed = TRUE, vertices = nodes)
-lay = create_layout(g, layout = "with_kk")
+#create_network <- Sys.time() - create_network
+
+
 
 filter_by_date <- function(ds,range ){
 return( ds %>%
@@ -229,13 +261,21 @@ filter_by_class <- function(ds,selector){
 top <- function(list,n){
   return( head(sort(list, decreasing = TRUE),n) )
 }
-```
-## Introduction
 
+#load_games
+#dataframe_games
+#load_plays
+#dataframe_plays
+#dataframe_filtered_plays
+#dataframe_nodes
+#dataframe_edges
+#create_network
+```
+
+## Introduction
 In this presentation we will analize the card game Hearthsone.
-- We will see how the "meta" has changed through the years, which decks have been played and we will try to figure out why they haev been played.
+- We will see how the "meta" has changed through the years, which classes have been played the most and we will try to figure out why they haev been played.
 - After that, there will be an analysis of each single card used in the game not only the frequency of usage during time but also we will try to figure out how a single card can have an impact on the game.
-- At the end there will be "mithbuster time" were we try to find if tips and advise from pro player are really useful or just mith.
 
 All the data are available [here](http://www.hearthscry.com/). Here we have loaded data from `r start` to `r end`.
 
@@ -276,7 +316,7 @@ knitr::kable(
 You can select one or more classes (if none there will be displayed all).
 ```{r}
 inputPanel(
-  checkboxGroupInput("class_selector", "Classi",
+  checkboxGroupInput("class_selector", "Classes",
     choiceNames = mapply(classi, icone, FUN = function(classe, iconeUrl) {
       tagList(
         tags$img(src=iconeUrl, width=50, height=50),
@@ -338,7 +378,7 @@ As before, We can select one or more classes (if none there will be displayed al
     
 ```{r}
 inputPanel(
-  checkboxGroupInput("presence_class_selector", "Classi",
+  checkboxGroupInput("presence_class_selector", "Classes",
     choiceNames = mapply(classi, icone, FUN = function(classe, iconeUrl) {
       tagList(
         tags$img(src=iconeUrl, width=50, height=50),
@@ -447,7 +487,7 @@ knitr::kable(
 As before, we can focus on a specific period of time and on a specific class.
 ```{r rank input}
 inputPanel(
-  checkboxGroupInput("rank_class_selector", "Classi",
+  checkboxGroupInput("rank_class_selector", "Classes",
     choiceNames = mapply(classi, icone, FUN = function(classe, iconeUrl) {
       tagList(
         tags$img(src=iconeUrl, width=50, height=50),
@@ -612,6 +652,7 @@ renderPlot({
         select(everything(), -period),
         use="all.obs",
         method="pearson")
+    , method = "ellipse"
     , type = "upper")
 })
 ```
@@ -619,17 +660,39 @@ renderPlot({
 ## Card Analysis
 Here tha analysis of the cards is done only for the last months of data because the creation of the network which cover all the data is really slow (on my latop over 30 minuts).
 
-```{r card network plotting}
-ggraph(g, layout = lay) + 
-  geom_edge_link(aes(alpha = weight)) + # edge link geom, mapping alpha to weight
-  geom_node_point(aes()) +     # node point geom, mapping size to pagerank centrality
-  theme_graph(base_family="sans")
+```{r card network plotting, out.width='100%'}
+plot_network <- Sys.time()
+
+# ggraph(g, layout = "with_kk" ) + 
+#   geom_edge_link(aes(alpha = weight)) + # edge link geom, mapping alpha to weight
+#   geom_node_point(aes(color = winrate)) +     # node point geom, mapping size to pagerank centrality
+#   theme_graph(base_family="sans")
+#load.image("img/card network plotting-1.png")
+knitr::include_graphics('img/card network plotting-1.png')
+plot_network <- Sys.time() - plot_network
 ```
 
 Let's analyze this network!!
-First of all...which are the most versatile cards? They are such cards which lies in lot of path (games).
+First of all I want to find out if play a card "on curve" (it means playing it on the first possible turn) it is woth or not. This is the distribution of the cards played. 
+```{r play on curve, include=FALSE}
+summary(nodes$avg_turn-nodes$mana)    
+ggplot(nodes, aes(x=avg_turn-mana, stat(density)), title("Density of cards played on curve")) +
+  geom_histogram(binwidth=1.5, alpha=0.25) +
+  geom_density(color="blue", size=1)+ 
+  theme_minimal()
+```
+
+We can see that most of the players tend to play cards at most one turn later of optimal play, does this influence the overall winrate?
+```{r winrate on curve, include=FALSE}
+ggplot(nodes%>%filter(avg_turn-mana>-1),aes(x = avg_turn-mana, y = winrate)) + 
+    geom_point(aes(alpha=avg_turn-mana))+
+    geom_smooth(se = TRUE) +
+    theme_minimal()
+```
+
+So, after this small introduction we can start to ask ourself more interesting questions like: which are the most versatile cards? They are such cards which lies in lot of path (games).
 ```{r betweenness}
-belli = top(betweenness(g),10)
+belli = top(betweenness(g),12)
 knitr::kable(
   belli, 
   caption = "Most versatile cards (using betweenness)"
@@ -659,10 +722,10 @@ S[2,]
 D[1,]
 ```
 
-Which are the most powerful cards?
+Which are the cards which have a big impact in the game?
 
 ```{r power}
-forti = top(power_centrality(g),10)
+forti = top(power_centrality(g),12)
 knitr::kable(
   belli, 
   caption = "Most important cards (using power)"
@@ -672,7 +735,7 @@ knitr::kable(
 But usually, a card is not played alone. Can we identify combos? Which are the most played combination of cards
 ```{r combos}
 knitr::kable(
-  head(edges %>% arrange(-weight),20), 
+  head(edges %>% arrange(-weight),12), 
   caption = "Most played combination of cards"
 )
 ```
@@ -684,11 +747,11 @@ giocate_corrette <- nodes %>%
   left_join(edges, by = c("name" = "card_1")) %>%
   left_join(nodes, by = c("card_2" = "name")) %>%
   filter(winrate.x < winrate.y, winrate.x>0, mana.x<mana.y)%>%
-  select(name, mana.x, winrate.x, card_2, mana.y,winrate.y)%>%
+  select(name, mana.x, winrate.x, card_2, mana.y,winrate.y, weight)%>%
   distinct()
 
 knitr::kable(
-  head(giocate_corrette %>% arrange(-(winrate.y-winrate.x)),20), 
+  head(giocate_corrette %>% arrange(-(winrate.y-winrate.x)*weight),12), 
   caption = "Most important cards (using power)"
 )
 
@@ -700,4 +763,4 @@ giocate_molto_forti <- giocate_corrette %>%
   distinct()
 ```
 
-Combos are usually good plays...is it real?
+In this analysis we miss (unfortunately) the archetypes data (which kind of deck is been used). This would allow us to better understand the similarity between cards and the importance of a card in a specific archetype.
